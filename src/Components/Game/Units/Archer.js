@@ -4,16 +4,13 @@ export default class Archer extends Phaser.Physics.Arcade.Sprite{
     constructor(scene, x, y, direction) {
       super(scene, x, y, 'archer');
       this.health = 100;
-      this.damage = 100;
-      this.range = 40;
+      this.damage = 30;
+      this.range = 200;
       this.direction=direction;
-      this.speed = 100;
-      this.attackCooldown = 2000;
-      this.lastAttackTime = 0;
-      this.attackAnimation = 'RedAttack';
-      this.runAnim = 'ArcherRedRun'
-     
-    // Add this entity to the scene's physics
+      this.speed = 10;
+      this.hasSpawned = false;
+      this.isDead=false;
+      // Add this entity to the scene's physics
   
     scene.physics.world.enable(this);
     
@@ -35,7 +32,7 @@ export default class Archer extends Phaser.Physics.Arcade.Sprite{
       key: 'RedAttack',
       frames: scene.anims.generateFrameNumbers('ArcherAll', { start:25, end : 34}),
       frameRate: 15,
-      repeat: -1,
+      repeat: 0,
     });
   }
 
@@ -44,17 +41,19 @@ export default class Archer extends Phaser.Physics.Arcade.Sprite{
     key: 'RedDeath',
     frames: scene.anims.generateFrameNumbers('ArcherAll', { start:120, end : 127}),
     frameRate: 8,
-    repeat: 1,
+    repeat: 0,
   });
   }
 
 console.log('Animation created:', scene.anims.get('ArcherRedRun'));
 console.log('Animation created:', scene.anims.get('RedAttack'));
+console.log('Animation created:', scene.anims.get('RedDeath'));
     }
 
     // Method to spawn the archer
     spawn() {
-      
+    
+      this.setVisible(true);
       if (this.direction === 'right') {
         this.setVelocityX(10); // Move right
         this.flipX=true;
@@ -62,55 +61,78 @@ console.log('Animation created:', scene.anims.get('RedAttack'));
         this.setVelocityX(-10); // Move left
         this.flipX=false
       }
-      this.setVisible(true);
+      
       this.anims.play('ArcherRedRun');
       this.setOffset(40,65)
       this.setDepth(1);
       console.log(`Archer has been spawned with ${  this.health  } health, ${  this.damage  } damage, and ${  this.range  } range.`);
-
-     
-      this.attackTimer = this.scene.time.addEvent({
-        delay: this.attackCooldown,
-        callback: () => {
-          this.attackTarget();
-        },
-        loop: true,
-      });
     }
   
-    update() {
-      // Vérifiez si l'archer est en train d'attaquer et arrêtez le mouvement
-      if (this.isAttacking) {
-        this.setVelocityX(0);
-      }
-    }
-  
-    // Method for the archer to attack
-    attackTarget(target) {
-      if (target && target.health > 0) {
-        // L'ennemi est à portée, effectuez l'attaque
-        this.isAttacking = true;
-        this.attackTimer.paused = true;
-        this.setVelocityX(0);
-        this.anims.play('RedAttack');
     
-        target.takeDamage(this.damage);
-        this.scene.time.delayedCall(this.attackCooldown, () => {
-          this.isAttacking = false;
-          this.attackTimer.paused = false;
-          console.log(`Archer attacks with ${this.damage} damage.`);
-        });
-      } else {
-        // Pas d'ennemi valide à portée pour l'attaque
-        this.isAttacking = false;
-        this.anims.play('ArcherRedRun');
-        console.log('No valid target in range for attack');
+  
+    attackTarget(target) {
+      if (!this.isDead && target && !target.isDead) {
+        const distanceToTarget = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
+    
+        if (distanceToTarget <= this.range) {
+          this.setVelocityX(0); // Stop moving
+          this.setVelocityY(0);
+    
+          // Only start the attack animation if it's not already playing
+          if (!this.anims.isPlaying || this.anims.currentAnim.key !== 'RedAttack') {
+            this.anims.play('RedAttack').chain('ArcherRedRun');
+    
+            this.once('animationcomplete', () => {
+              // eslint-disable-next-line prefer-const
+              this.scene.sound.play('arrowSound');
+              
+              target.takeDamage(this.damage);
+    
+              if (!target.isDead && target.health > 0) {
+                // If the target is still alive, attack again
+                this.attackTarget(target);
+              } else {
+                // If the target is dead, stop the 'RedAttack' animation
+                this.anims.stop('RedAttack');
+              }
+            });
+          }
+        }
+      }
+    }
+    
+    
+    
+    takeDamage(damage) {
+      console.log("i take damagse");
+      if (!this.isDead) {
+        this.health -= damage;
+    
+        if (this.health <= 0) {
+          this.health = 0;
+         
+        }
       }
     }
 
-    takeDamage(damage){
-      this.health-=damage;
-      console.log("attack")
+    die() {
+      if (!this.isDead) {
+        this.isDead = true;
+        this.setImmovable(true); // Makes the unit immovable
+        this.setVelocityX(0); // Stop moving
+        this.setVelocityY(0);
+        this.body.checkCollision.none = true; // Disables collisions
+    
+        this.anims.play('RedDeath');
+    
+        this.once('animationcomplete', () => {
+          // Use the remove method of Physics.Arcade.Group or Physics.Arcade.StaticGroup
+          this.scene.physics.add.group().remove(this);
+          this.destroy();
+          console.log('Archer has died.');
+        });
+      }
     }
+
   }
   

@@ -1,3 +1,4 @@
+/* eslint-disable import/no-named-as-default */
 /* eslint-disable prefer-arrow-callback */
 /* eslint-disable prefer-const */
 /* eslint-disable no-plusplus */
@@ -9,6 +10,7 @@ import soundOffAsset from '../../assets/soundOff.png';
 import backgroundGameAsset from '../../assets/background.png';
 import hudAsset from '../../assets/armadaHUD.png';
 import { createCards, preloadCards } from './CardCreator';
+
 import Player from './Player';
 import baseSpriteSheet from '../../assets/playerBase.png';
 import { preloadPlayerBase } from './PlayerBase';
@@ -22,30 +24,32 @@ import Knight from './Units/Knight';
 import Necro from './Units/Necro';
 import Warrior from './Units/Warrior';
 
-
-function handleOverlap(unit1, unit2) {
-  // Si les unités se déplacent dans la même direction
-  if (unit1.body.velocity.x === unit2.body.velocity.x) {
-      // Si l'unité1 est devant l'unité2 et se déplace vers la droite (équipe 1)
-      if (unit1.x > unit2.x && unit1.body.velocity.x > 0) {
-          unit1.setVelocityX(0);
-      }
-      // Si l'unité1 est derrière l'unité2 et se déplace vers la gauche (équipe 2)
-      else if (unit1.x < unit2.x && unit1.body.velocity.x < 0) {
-          unit1.setVelocityX(0);
-      }
-  }
-}
-
-// Variables here
-let cursors;
+import arrowSounds from '../../assets/audio/Sound-effects/arrow.mp3';
+import laserSounds from '../../assets/audio/Sound-effects/laser.mp3';
+import magics from '../../assets/audio/Sound-effects/magic.mp3';
+import lightsaberSounds from '../../assets/audio/Sound-effects/lightsaberGood.mp3';
+import swordSounds from '../../assets/audio/Sound-effects/sword.mp3';
 
 
+ // Create a health bar for objPlayerBase1
+ let healthBarWidth1 = 296; // Adjust the width of the health bar
+ let healthBarHeight = 6; // Adjust the height of the health bar
+ // Create a health bar for objPlayerBase2
+ let healthBarWidth2 = 296; // Adjust the width of the health bar
+ 
 let player2CharactersGroup;
 let player1CharactersGroup;
 
-let lastSpawnedIndex1 = 1;
-let lastSpawnedIndex2 = 1;
+let objPlayerBase1;
+let objPlayerBase2;
+
+let baseHealthBarValue;
+
+const minimumHpNeededToTurnHealthBarInRed = 400;
+let colorGreen = 0x008000;
+let colorRed = 0xFF0000;
+let colorUsedP1 = null;
+let colorUsedP2 = null;
 
 let spawnPointsTeam1 = [
   { x: 120, y: 350 },
@@ -62,6 +66,24 @@ let spawnPointsTeam2 = [
 ];
 
 
+function findClosestUnit(unit, unitGroup) {
+  let closestUnit = null;
+  let closestDistance = Infinity;
+
+  unitGroup.children.iterate(function (otherUnit) {
+    if (otherUnit.isDead) {
+      return; // Skip dead units
+    }
+
+    const distance = Phaser.Math.Distance.Between(unit.x, unit.y, otherUnit.x, otherUnit.y);
+    if (distance < closestDistance) {
+      closestUnit = otherUnit;
+      closestDistance = distance;
+    }
+  });
+
+  return closestUnit;
+}
 
 
 class GameScene extends Phaser.Scene {
@@ -82,20 +104,28 @@ class GameScene extends Phaser.Scene {
     this.indexP1=0;
     this.cardsP2=[];
     this.indexP2=0;
+    this.graphics1 = null;
+    this.graphics2 = null;
     
     
     // this.KnightSpawn = undefined;
   }
-
+  
+  
   // eslint-disable-next-line class-methods-use-this
   handleSceneShutdown() {
    
   }
   
   preload() {
-    // TEST FOR EXEMPLE DONT DELETE THIS
-    this.load.image('KNIGHT_KEY', MobP1Ex)
-    // thx
+    
+    this.load.audio('arrowSound', arrowSounds);
+    this.load.audio('laserSound', laserSounds);
+    this.load.audio('magicSound', magics);
+    this.load.audio('lightsaberSound', lightsaberSounds);
+    this.load.audio('swordSound', swordSounds);
+
+
     this.load.image('backgroundGame', backgroundGameAsset);
     this.load.image('hud', hudAsset);
     this.load.image('soundOn', soundOnAsset);
@@ -113,12 +143,27 @@ class GameScene extends Phaser.Scene {
 
   create() {
    
+  // Draw a background rectangle for the health bar
+  this.graphics1 = this.add.graphics();
+  this.graphics1.fillStyle(0x008000, 1);
+  this.graphics1.fillRect(14, 28, healthBarWidth1, healthBarHeight).setDepth(1);
+
+  // Draw a background rectangle for the health bar
+  this.graphics2 = this.add.graphics();
+  this.graphics2.fillStyle(0x008000, 1);
+  this.graphics2.fillRect(490, 28, healthBarWidth2, healthBarHeight).setDepth(1);
+
     player1CharactersGroup=this.add.group();
     player2CharactersGroup=this.add.group();
     
-    
-    player1CharactersGroup.add(new PlayerBase(this,50, 250));
-    player2CharactersGroup.add(new PlayerBase(this,750, 250));
+    objPlayerBase1 = new PlayerBase(this,50,250);
+    objPlayerBase2 = new PlayerBase(this,750,250);
+
+    // this updates the healthbar lenght in function of the const base hp of the "base"
+    baseHealthBarValue = objPlayerBase1.health;
+
+    player1CharactersGroup.add(objPlayerBase1);
+    player2CharactersGroup.add(objPlayerBase2);
 
     let base1 = player1CharactersGroup.getChildren();
     base1.forEach(base => {
@@ -174,7 +219,6 @@ function addWarriorP1(indexP1, scene) {
   switch(indexP1) {
     case 0:
       player1CharactersGroup.add(new Archer(scene,spawnPointTeam1.x,spawnPointTeam1.y,'right'));
-      console.log(spawnPointTeam1.x,spawnPointTeam1.y)
       break;
     case 1:
       player1CharactersGroup.add(new Exterminator(scene,spawnPointTeam1.x,spawnPointTeam1.y,'right'));
@@ -196,16 +240,16 @@ function addWarriorP1(indexP1, scene) {
 
 // Spawn warriors
 const spawnWarriors1 = () => {
-  for(let i = lastSpawnedIndex1; i < player1CharactersGroup.getChildren().length; i++) {
-      let warrior = player1CharactersGroup.getChildren()[i];
+  player1CharactersGroup.getChildren().forEach(warrior => {
+    if (!warrior.hasSpawned) {
       warrior.spawn();
-  }
-  lastSpawnedIndex1 = player1CharactersGroup.getChildren().length;
-  this.physics.add.collider(player1CharactersGroup, player1CharactersGroup,handleOverlap, null, this);
-
-  // Ajoutez la détection de collision ici
+      // eslint-disable-next-line no-param-reassign
+      warrior.hasSpawned = true;
+    }
+  });
+  this.physics.add.collider(player1CharactersGroup, player1CharactersGroup);
+  this.physics.add.collider(player2CharactersGroup, player1CharactersGroup);
 }
-
 
 
 // fonction pour choisir cartes a gauche P2
@@ -250,7 +294,7 @@ function addWarriorP2(indexP2, scene) {
 
   switch(indexP2) {
     case 0:
-      player2CharactersGroup.add(new Archer(scene, spawnPointTeam2.x, spawnPointTeam2.y,'left'));
+      player2CharactersGroup.add(new Archer(scene, spawnPointTeam2.x, spawnPointTeam2.y,'left', player2CharactersGroup.get));
       break;
     case 1:
       player2CharactersGroup.add(new Exterminator(scene, spawnPointTeam2.x, spawnPointTeam2.y,'left'));
@@ -269,13 +313,15 @@ function addWarriorP2(indexP2, scene) {
   }
 }
 
-// Spawn warriors
+/// Spawn warriors
 const spawnWarriors2 = () => {
-  for(let i = lastSpawnedIndex2; i < player2CharactersGroup.getChildren().length; i++) {
-      let warrior = player2CharactersGroup.getChildren()[i];
+  player2CharactersGroup.getChildren().forEach(warrior => {
+    if (!warrior.hasSpawned) {
       warrior.spawn();
-  }
-  lastSpawnedIndex2 = player2CharactersGroup.getChildren().length;
+      // eslint-disable-next-line no-param-reassign
+      warrior.hasSpawned = true;
+    }
+  });
   this.physics.add.collider(player2CharactersGroup, player2CharactersGroup);
   this.physics.add.collider(player1CharactersGroup, player2CharactersGroup);
 }
@@ -300,22 +346,9 @@ const spawnWarriors2 = () => {
 
     
 
-    // Define keybinds
- cursors = this.input.keyboard.createCursorKeys();
-  
-
 
   
 
-
-
-
-
-
-
- 
-    
-    
     // eslint-disable-next-line no-console
 
     
@@ -528,129 +561,97 @@ const spawnWarriors2 = () => {
     
 
   }
+// Helper function to find the closest unit from a group to a given unit
 
-  // eslint-disable-next-line class-methods-use-this
-  update() {
+// to delete
+// let healthBarWidth1 = 296; // Adjust the width of the health bar
+// let healthBarWidth2 = 296; // Adjust the width of the health bar
 
-    // logic to find out the winner
-    if(this.player1.health <= 0) {
+update() {
+  // logic to find out the winner
+    healthBarWidth1 = 296 * (objPlayerBase1.health / baseHealthBarValue);
+    if(objPlayerBase1.health <= 0) {
       this.sys.game.global = {winner: this.player2.playerName};
       this.sound.stopAll();
       this.scene.stop('game-scene');
       this.scene.switch('end-scene');
     }
-    if(this.player2.health <= 0) {
+    
+    healthBarWidth2 = 296 * (objPlayerBase2.health / baseHealthBarValue);
+    if(objPlayerBase2.health <= 0) {
       this.sys.game.global = {winner: this.player1.playerName};
       this.sound.stopAll();
       this.scene.stop('game-scene');
       this.scene.switch('end-scene');
     }
 
+    /* eslint-disable no-undef */
+    // Update the graphics for health bars
+    if(objPlayerBase1.health <= minimumHpNeededToTurnHealthBarInRed) {
+      colorUsedP1 = colorRed
+    } else {
+      colorUsedP1 = colorGreen;
+    }
 
-    let closestUnit2 = this.base2;
+    if(objPlayerBase2.health <= minimumHpNeededToTurnHealthBarInRed) {
+      colorUsedP2 = colorRed
+    } else {
+      colorUsedP2 = colorGreen;
+    }
+    this.graphics1.clear(); // Clear the previous graphics to redraw
+    this.graphics1.fillStyle(colorUsedP1, 1);
+    this.graphics1.fillRect(14, 28, healthBarWidth1, healthBarHeight).setDepth(1);
     
-    let closestDistance2 = Infinity;
-    // Mettez à jour la position de chaque unité de l'équipe 1
-    player1CharactersGroup.children.iterate(function(unit1) {
+    this.graphics2.clear();
+    this.graphics2.fillStyle(colorUsedP2, 1);
+    this.graphics2.fillRect(490, 28, healthBarWidth2, healthBarHeight).setDepth(1);
+    
+  // Mettre à jour la position et le comportement de chaque unité de l'équipe 1
+  player1CharactersGroup.children.iterate(function  (unit1) {
+    if (unit1.health <= 0) {
+      unit1.die();
+      return; // Ignorer les mises à jour pour les unités mortes
+    }
 
-    
-      // Trouver l'unité de l'équipe 2 la plus proche
-      player2CharactersGroup.children.iterate(function(unit2) {
-        let distance = Phaser.Math.Distance.Between(unit1.x, unit1.y, unit2.x, unit2.y);
-        if (distance < closestDistance2) {
-          closestUnit2 = unit2;
-          closestDistance2 = distance;
-          console.log(typeof closestUnit2);
-        }
-      });
-    
-      // Déplacer l'unité de l'équipe 1 vers l'unité de l'équipe 2 la plus proche
-      if (closestUnit2 && closestUnit2.active) {
-        // Vérifier si la distance est inférieure au range de l'unité
-        if (closestDistance2 <= unit1.range) {
-          // Arrêter le mouvement de l'unité
-          unit1.setVelocity(0, 0);
-          unit1.attackTarget(closestUnit2);
-          console.log('unit 2 est tapé');
-          closestUnit2.takeDamage(unit1.damage);
-          if(closestUnit2.health===0 || closestUnit2.health<0 ){
-            closestUnit2.setVisible(false).setActive(false);
-            closestUnit2.destroy();   
-            console.log("unit 1 est mort");
-            closestUnit2=null;
-          } 
-          // Vérifier s'il y a un timer d'attaque et s'il est prêt
-          if (unit1.attackTimer) {
-            console.log("le minuteur marche");
-            // Réinitialiser le timer d'attaque
-            unit1.attackTimer.reset();
-          }
-        
-        }else{
-          // Continuer le mouvement de l'unité
-          this.physics.moveToObject(unit1, closestUnit2, unit1.speed);
-          // Changer l'animation de l'unité pour le mouvement
-        }
-        
+    let closestUnit2 = findClosestUnit(unit1, player2CharactersGroup);
+
+    if (closestUnit2) {
+      if (Phaser.Math.Distance.Between(unit1.x, unit1.y, closestUnit2.x, closestUnit2.y) < unit1.range) {
+        // Arrêter le mouvement et attaquer l'unité la plus proche de l'équipe 2
+        unit1.attackTarget(closestUnit2);
       } else {
-        console.log('No valid target for attack');
+        // Se déplacer vers l'unité la plus proche de l'équipe 2
+        this.physics.moveToObject(unit1, closestUnit2, unit1.speed);
       }
-    }, this);
-    
-   if (closestUnit2===null){
-    closestUnit2=this.base2;
-  }
+    } else {
+      console.log('Pas de cible valide pour l\'équipe 1');
+    }
+  }, this);
 
-    let closestUnit1 = this.base1;
-    let closestDistance1 = Infinity;
-    // Faire la même chose pour l'équipe 2
-    player2CharactersGroup.children.iterate(function(unit2) {
+  // Mettre à jour la position et le comportement de chaque unité de l'équipe 2
+  player2CharactersGroup.children.iterate(function (unit2) {
+    if (unit2.health <= 0) {
+      unit2.die();
+      return; // Ignorer les mises à jour pour les unités mortes
+    }
 
-    
-      // Trouver l'unité de l'équipe 1 la plus proche
-      player1CharactersGroup.children.iterate(function(unit1) {
-        let distance = Phaser.Math.Distance.Between(unit2.x, unit2.y, unit1.x, unit1.y);
-        if (distance < closestDistance1) {
-          closestUnit1 = unit1;
-          closestDistance1 = distance;
-        }
-      });
-    
-      // Déplacer l'unité de l'équipe 2 vers l'unité de l'équipe 1 la plus proche
-      if (closestUnit1 && closestUnit1.active) {
-        // Vérifier si la distance est inférieure au range de l'unité
-        if (closestDistance1 < unit2.range) {
-          console.log("check de la range");
-          // Arrêter le mouvement de l'unité
-          unit2.setVelocity(0, 0);
-          // Changer l'animation de l'unité pour l'attaque
-         
-          // Vérifier s'il y a un timer d'attaque et s'il est prêt
-          if (unit2.attackTimer) { // && unit2.attackTimer.getElapsedSeconds() >= 2
-            // Infliger des dégâts à la cible
-            unit2.attackTarget(closestUnit1);
-            console.log("unit2 tape unit1");
-            if(closestUnit1.health===0 || closestUnit1.health<0 ){ // DIE
-            closestUnit1.setVisible(false).setActive(false);
-            closestUnit1.destroy();   
-            console.log("unit 1 est mort");
-            closestUnit1=null;
-            } 
-            // Réinitialiser le timer d'attaque
-            unit2.attackTimer.reset();
-          }
-        
-        }else{
-          // Continuer le mouvement de l'unité
-          this.physics.moveToObject(unit2, closestUnit1, unit2.speed);
-          // Changer l'animation de l'unité pour le mouvement
-        
-        }
+    let closestUnit1 = findClosestUnit(unit2, player1CharactersGroup);
+
+    if (closestUnit1) {
+      if (Phaser.Math.Distance.Between(unit2.x, unit2.y, closestUnit1.x, closestUnit1.y) < unit2.range) {
+        // Arrêter le mouvement et attaquer l'unité la plus proche de l'équipe 1
+        unit2.attackTarget(closestUnit1);
+      } else {
+        // Se déplacer vers l'unité la plus proche de l'équipe 1
+        this.physics.moveToObject(unit2, closestUnit1, unit2.speed);
       }
-    }, this);
-   if (closestUnit1===null){
-    closestUnit1=this.base1;}
-  }
+    } else {
+      console.log('Pas de cible valide pour l\'équipe 2');
+    }
+  }, this);
+}
+
+  
    // HERE END OF UPDATE
 
    die() {  
