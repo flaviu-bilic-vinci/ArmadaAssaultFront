@@ -15,7 +15,6 @@ import Player from './Player';
 import baseSpriteSheet from '../../assets/playerBase.png';
 import { preloadPlayerBase } from './PlayerBase/PlayerBaseGraphic';
 import PlayerBase from './PlayerBase/PlayerBaseLogic';
-import MobP1Ex from '../../assets/mobPlayer1Ex.png';
 import {preloadSpriteSheets} from './Animations'
 // eslint-disable-next-line import/no-cycle, import/no-named-as-default
 import Archer from './Units/Archer';
@@ -477,10 +476,9 @@ const spawnWarriors2 = () => {
       .setDepth(1);
 
     let timeLeft = 10;
-
     let incrementAmount = 100;
 
-    const unitCosts = [90, 110, 150, 100, 120]; // cost of differents units
+    const unitCosts = [50, 30, 200, 70, 500]; // cost of differents units
 
     const getUnitCost = (index) => {
       // Assurez-vous que l'index est valide, sinon retournez 0
@@ -539,8 +537,9 @@ const spawnWarriors2 = () => {
         const currentGolds2 = Math.floor(this.player2.golds);
         player1GoldsText.setText(`${currentGolds1}`);
         player2GoldsText.setText(`${currentGolds2}`);
-        incrementAmount *= 1.25;
-      }
+        if(incrementAmount<1200) incrementAmount *= 1.25;
+        if(incrementAmount>1200) incrementAmount =1200;
+      };
     };
 
     const timerEvent = this.time.addEvent({

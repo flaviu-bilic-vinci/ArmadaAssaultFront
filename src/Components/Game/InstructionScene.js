@@ -1,11 +1,11 @@
 /* eslint-disable no-unused-vars */
 import Phaser from 'phaser';
-import backgroundAsset from '../../assets/start_background.png';
 import logoAsset from '../../assets/ARMADA_ASSAULT_LOGO_TEXT_NOBACKGROUND.png';
-import goldLogoAsset from '../../assets/gold.png';
+import goldLogoAsset from '../../assets/Icons_instruction_scene/gold.png';
 import timerAsset from '../../assets/Icons_instruction_scene/timer_icon.png';
 import keysAsset from '../../assets/Icons_instruction_scene/keys_to_control_selection.png';
 import charSelectedAsset from '../../assets/Icons_instruction_scene/char_selected_highlight.png';
+import playersBases from '../../assets/Icons_instruction_scene/playerBaseWiki.png'
 
 export default class InstructionScene extends Phaser.Scene {
   constructor() {
@@ -13,12 +13,12 @@ export default class InstructionScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('background', backgroundAsset);
     this.load.image('logo', logoAsset);
     this.load.image('goldLogo', goldLogoAsset);
     this.load.image('timer', timerAsset);
     this.load.image('keys', keysAsset);
     this.load.image('charSelected', charSelectedAsset);
+    this.load.image('playersBases', playersBases);
   }
 
   create() {
@@ -168,6 +168,27 @@ export default class InstructionScene extends Phaser.Scene {
             },
           )
           .setOrigin(0, 0.5);
+        // Logo base
+        const baseLogo = this.add
+          .image(this.scale.width * 0.02, this.scale.height * 0.80, 'playersBases')
+          .setOrigin(0, 0.5)
+          .setScale(0.4);
+
+        const baseText =  this.add
+        .text(
+          this.scale.width * 0.10,
+          this.scale.height * 0.77,
+          ': This is the nexus, as it is hit by units, its life decreases, the life bar at the top of the screen will drop accordingly, and if it reaches 0 it is game over. ',
+          {
+            fontFamily: 'Blackletter, serif',
+            fontSize: '20px',
+            color: '#ffffff',
+            fontStyle: 'bold',
+            wordWrap: {
+              width: this.scale.width * 0.8,
+            },
+          },
+        )
 
   }
 }
